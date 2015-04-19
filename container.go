@@ -711,6 +711,9 @@ type AttachToContainerOptions struct {
 
 	// Use raw terminal? Usually true when the container contains a TTY.
 	RawTerminal bool `qs:"-"`
+
+	// Use WebSocket?
+	WebSocket bool `qs:"-"`
 }
 
 // AttachToContainer attaches to a container, using the given options.
@@ -719,6 +722,10 @@ type AttachToContainerOptions struct {
 func (c *Client) AttachToContainer(opts AttachToContainerOptions) error {
 	if opts.Container == "" {
 		return &NoSuchContainer{ID: opts.Container}
+	}
+	if opts.WebSocket {
+		path := "/containers/" + opts.Container + "/attach/ws?" + queryString(opts)
+		return c.websocket(path, opts.Success, opts.RawTerminal, opts.InputStream, opts.ErrorStream, opts.OutputStream)
 	}
 	path := "/containers/" + opts.Container + "/attach?" + queryString(opts)
 	return c.hijack("POST", path, opts.Success, opts.RawTerminal, opts.InputStream, opts.ErrorStream, opts.OutputStream, nil)

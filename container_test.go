@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestStateString(t *testing.T) {
@@ -977,6 +979,85 @@ func TestAttachToContainer(t *testing.T) {
 	got := map[string][]string(req.URL.Query())
 	if !reflect.DeepEqual(got, expected) {
 		t.Errorf("AttachToContainer: wrong query string. Want %#v. Got %#v.", expected, got)
+	}
+}
+
+func TestAttachToContainerWebSocket(t *testing.T) {
+	var reader = strings.NewReader("send value")
+	var req http.Request
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	done := make(chan bool, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req = *r
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() {
+			var buffer bytes.Buffer
+			_, reader, err := conn.NextReader()
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := ioutil.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buffer.Write(data)
+			got := buffer.String()
+			if got != "send value" {
+				t.Errorf("AttachToContainer: Expected send value. Got %s.", got)
+			}
+			done <- true
+		}()
+		go func() {
+			writeCloser, err := conn.NextWriter(websocket.BinaryMessage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer writeCloser.Close()
+			writeCloser.Write([]byte("hello"))
+			done <- true
+		}()
+	}))
+	defer server.Close()
+	client, _ := NewClient(server.URL)
+	client.SkipServerVersionCheck = true
+	var stdout, stderr bytes.Buffer
+	opts := AttachToContainerOptions{
+		Container:    "a123456",
+		OutputStream: &stdout,
+		ErrorStream:  &stderr,
+		InputStream:  reader,
+		Stdin:        true,
+		Stdout:       true,
+		Stderr:       true,
+		Stream:       true,
+		RawTerminal:  true,
+		WebSocket:    true,
+	}
+	err := client.AttachToContainer(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	<-done
+	expected := map[string][]string{
+		"stdin":  {"1"},
+		"stdout": {"1"},
+		"stderr": {"1"},
+		"stream": {"1"},
+	}
+	got := map[string][]string(req.URL.Query())
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("AttachToContainer: wrong query string. Want %#v. Got %#v.", expected, got)
+	}
+	gotStdout := stdout.String()
+	if gotStdout != "hello" {
+		t.Errorf("AttachToContainer: Expected hello. Got %s.", gotStdout)
 	}
 }
 

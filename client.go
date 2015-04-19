@@ -23,6 +23,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/gorilla/websocket"
 )
 
 const userAgent = "go-dockerclient"
@@ -431,6 +433,89 @@ func (c *Client) stream(method, path string, setRawTerminal, rawJSONStream bool,
 	return nil
 }
 
+func (c *Client) websocket(path string, success chan struct{}, setRawTerminal bool, in io.Reader, stderr, stdout io.Writer) error {
+	if stdout == nil {
+		stdout = ioutil.Discard
+	}
+	if stderr == nil {
+		stderr = ioutil.Discard
+	}
+	dial, err := c.dial()
+	if err != nil {
+		return err
+	}
+	url_, err := url.Parse(c.getURL(path))
+	if err != nil {
+		return err
+	}
+	conn, _, err := websocket.NewClient(dial, url_, nil, 1024, 1024)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if success != nil {
+		success <- struct{}{}
+		<-success
+	}
+	inErrC := make(chan error, 1)
+	outErrC := make(chan error, 1)
+	go func() {
+		defer close(outErrC)
+		messageType, reader, err := conn.NextReader()
+		if err != nil {
+			outErrC <- err
+			return
+		}
+		if messageType != websocket.BinaryMessage {
+			outErrC <- errors.New("got a non-binary message message type")
+			return
+		}
+		if setRawTerminal {
+			// When TTY is ON, use regular copy
+			_, err := io.Copy(stdout, reader)
+			if err != nil {
+				outErrC <- err
+			}
+		} else {
+			_, err := stdCopy(stdout, stderr, reader)
+			if err != nil {
+				outErrC <- err
+			}
+		}
+	}()
+	go func() {
+		var writeCloser io.WriteCloser
+		var err error
+
+		defer func() {
+			if writeCloser != nil {
+				writeCloser.Close()
+			}
+			close(inErrC)
+		}()
+
+		if in == nil {
+			inErrC <- nil
+			return
+		}
+		writeCloser, err = conn.NextWriter(websocket.BinaryMessage)
+		if err != nil {
+			inErrC <- err
+			return
+		}
+		_, err = io.Copy(writeCloser, in)
+		inErrC <- err
+	}()
+	var retErr error
+	if err := <-inErrC; err != nil && retErr == nil {
+		retErr = err
+	}
+	if err := <-outErrC; err != nil && retErr == nil {
+		retErr = err
+	}
+	return retErr
+}
+
 func (c *Client) hijack(method, path string, success chan struct{}, setRawTerminal bool, in io.Reader, stderr, stdout io.Writer, data interface{}) error {
 	if path != "/version" && !c.SkipServerVersionCheck && c.expectedAPIVersion == nil {
 		err := c.checkAPIVersion()
@@ -459,23 +544,9 @@ func (c *Client) hijack(method, path string, success chan struct{}, setRawTermin
 		return err
 	}
 	req.Header.Set("Content-Type", "plain/text")
-	protocol := c.endpointURL.Scheme
-	address := c.endpointURL.Path
-	if protocol != "unix" {
-		protocol = "tcp"
-		address = c.endpointURL.Host
-	}
-	var dial net.Conn
-	if c.TLSConfig != nil && protocol != "unix" {
-		dial, err = tlsDial(protocol, address, c.TLSConfig)
-		if err != nil {
-			return err
-		}
-	} else {
-		dial, err = net.Dial(protocol, address)
-		if err != nil {
-			return err
-		}
+	dial, err := c.dial()
+	if err != nil {
+		return err
 	}
 	clientconn := httputil.NewClientConn(dial, nil)
 	defer clientconn.Close()
@@ -511,6 +582,20 @@ func (c *Client) hijack(method, path string, success chan struct{}, setRawTermin
 	}()
 	<-exit
 	return <-errs
+}
+
+func (c *Client) dial() (net.Conn, error) {
+	protocol := c.endpointURL.Scheme
+	address := c.endpointURL.Path
+	if protocol != "unix" {
+		protocol = "tcp"
+		address = c.endpointURL.Host
+	}
+	if c.TLSConfig != nil && protocol != "unix" {
+		return tlsDial(protocol, address, c.TLSConfig)
+	} else {
+		return net.Dial(protocol, address)
+	}
 }
 
 func (c *Client) getURL(path string) string {
