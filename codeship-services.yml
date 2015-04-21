@@ -1,12 +1,12 @@
 1_4_386:
   build:
     dockerfile_path: Dockerfile.1_4
-    image: fsouza/dockerclient14
   environment:
+    GOOS: linux
     GOARCH: 386
 1_4_amd64:
   build:
     dockerfile_path: Dockerfile.1_4
-    image: fsouza/dockerclient14
   environment:
+    GOOS: linux
     GOARCH: amd64
