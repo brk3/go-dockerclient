@@ -4,5 +4,7 @@
     - 1_3_amd64
     - 1_4_386
     - 1_4_amd64
+    - tip_386
+    - tip_amd64
   steps:
     - command: make test

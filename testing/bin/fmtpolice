@@ -31,7 +31,7 @@ _lint_verbose() {
 
 _install_linter() {
   if [[ ! -x "${GOPATH}/bin/golint" ]] ; then
-    go get -u -f github.com/golang/lint/golint
+    go get -u github.com/golang/lint/golint
   fi
   if [[ ! -x "${GOPATH}/bin/golint" ]] && [[ -x "${GOPATH}/bin/${GOOS}_${GOARCH}/golint" ]] ; then
     ln -s "${GOPATH}/bin/${GOOS}_${GOARCH}/golint" "${GOPATH}/bin/golint"
