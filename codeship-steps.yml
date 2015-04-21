@@ -1,5 +1,7 @@
 - type: parallel
   services:
+    - 1_3_386
+    - 1_3_amd64
     - 1_4_386
     - 1_4_amd64
   steps:

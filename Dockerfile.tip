@@ -1,0 +1,6 @@
+FROM golang:cross
+MAINTAINER peter.edge@gmail.com
+
+RUN mkdir -p /go/src/github.com/peter-edge/go-dockerclient
+ADD . /go/src/github.com/peter-edge/go-dockerclient/
+WORKDIR /go/src/github.com/peter-edge/go-dockerclient

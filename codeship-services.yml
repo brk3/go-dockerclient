@@ -1,3 +1,15 @@
+1_3_386:
+  build:
+    dockerfile_path: Dockerfile.1_3
+  environment:
+    GOOS: linux
+    GOARCH: 386
+1_3_amd64:
+  build:
+    dockerfile_path: Dockerfile.1_3
+  environment:
+    GOOS: linux
+    GOARCH: amd64
 1_4_386:
   build:
     dockerfile_path: Dockerfile.1_4
@@ -7,6 +19,18 @@
 1_4_amd64:
   build:
     dockerfile_path: Dockerfile.1_4
+  environment:
+    GOOS: linux
+    GOARCH: amd64
+tip_386:
+  build:
+    dockerfile_path: Dockerfile.tip
+  environment:
+    GOOS: linux
+    GOARCH: 386
+tip_amd64:
+  build:
+    dockerfile_path: Dockerfile.tip
   environment:
     GOOS: linux
     GOARCH: amd64
